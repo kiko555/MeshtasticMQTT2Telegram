@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+python-telegram-bot = "*"
+install = "*"
+python-dotenv = "*"
+paho-mqtt = "*"
+cryptography = "*"
+meshtastic = "*"
+plyer = "*"
+pyobjus = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.10"
