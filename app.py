@@ -15,7 +15,7 @@ from meshtastic import mesh_pb2, mqtt_pb2, portnums_pb2, telemetry_pb2
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-from plyer import notification
+# from plyer import notification
 
 from dotenv import load_dotenv
 from telegram import Bot
@@ -37,7 +37,7 @@ bot = Bot(token=TOKEN)
 
 # Default settings
 MQTT_BROKER = os.getenv("MQTT_BROKER")
-MQTT_PORT = os.getenv("MQTT_PORT")
+MQTT_PORT = int(os.getenv("MQTT_PORT"))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 
@@ -70,11 +70,11 @@ def process_message(mp, text_payload, is_encrypted, client_id):
         "to": getattr(mp, "to")
     }
 
-    notification.notify(
-    title = f"{getattr(mp, 'from')}",
-    message = f"{text_payload}",
-    timeout = 10
-    )
+    # notification.notify(
+    # title = f"{getattr(mp, 'from')}",
+    # message = f"{text_payload}",
+    # timeout = 10
+    # )
     print(text)
 
 def decode_encrypted(message_packet,client_id):
