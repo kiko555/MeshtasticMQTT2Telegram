@@ -10,7 +10,7 @@ import base64
 import asyncio
 import paho.mqtt.client as mqtt
 
-from meshtastic import mesh_pb2, mqtt_pb2, portnums_pb2, telemetry_pb2
+from meshtastic import mesh_pb2, mqtt_pb2, portnums_pb2, telemetry_pb2, BROADCAST_NUM
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
@@ -19,6 +19,8 @@ from cryptography.hazmat.backends import default_backend
 
 from dotenv import load_dotenv
 from telegram import Bot
+
+import sqlite3
 
 # 加載 .env 文件
 load_dotenv()
@@ -49,10 +51,10 @@ padded_key = key.ljust(len(key) + ((4 - (len(key) % 4)) % 4), '=')
 replaced_key = padded_key.replace('-', '+').replace('_', '/')
 key = replaced_key
 
-broadcast_id = 4294967295
+# broadcast_id = 4294967295
 
 # Convert hex to int and remove '!'
-node_number = int('abcd', 16)
+# node_number = int('abcd', 16)
 
 async def send_telegram_message(bot, chat_id, text_payload):
     await bot.send_message(chat_id=chat_id, text=text_payload)
@@ -73,7 +75,7 @@ def process_message(mp, text_payload, is_encrypted):
     # )
     print(text)
 
-def decode_encrypted(message_packet):
+def decode_encrypted(message_packet, client_id):
     try:
         key_bytes = base64.b64decode(key.encode('ascii'))
 
@@ -101,7 +103,27 @@ def decode_encrypted(message_packet):
         elif message_packet.decoded.portnum == portnums_pb2.NODEINFO_APP:
                 info = mesh_pb2.User()
                 info.ParseFromString(message_packet.decoded.payload)
-                print(info)
+                # print('----->nodeinfo',info)
+                # print(f'id:{info.id}, long_name:{info.long_name}')
+
+                if info.long_name is not None:
+                    # 建立或連接到數據庫
+                    conn = sqlite3.connect('meshtastic.db')
+                    cursor = conn.cursor()
+
+                    # 使用 INSERT OR REPLACE 來新增或更新資料
+                    cursor.execute(f'''INSERT OR REPLACE INTO MeshTW
+                                    (client_id, long_name, short_name)
+                                    VALUES (?, ?, ?)''',
+                                (client_id, info.long_name, info.short_name))
+
+                    # 確認並提交更改
+                    conn.commit()
+
+                    # 關閉連接
+                    conn.close()
+                    pass
+
                 # notification.notify(
                 # title = "Meshtastic",
                 # message = f"{info}",
@@ -110,12 +132,31 @@ def decode_encrypted(message_packet):
         elif message_packet.decoded.portnum == portnums_pb2.POSITION_APP:
             pos = mesh_pb2.Position()
             pos.ParseFromString(message_packet.decoded.payload)
-            print('pos',pos)
+            # print('----->client_id',client_id)
+            # print('----->pos',pos)
+
+            if pos.latitude_i != 0:
+                # # 建立或連接到數據庫
+                conn = sqlite3.connect('meshtastic.db')
+                cursor = conn.cursor()
+
+                # # 使用 INSERT OR REPLACE 來新增或更新資料
+                cursor.execute(f'''INSERT OR REPLACE INTO MeshTW
+                                (client_id, latitude_i, longitude_i, precision_bits)
+                                VALUES (?, ?, ?, ?)''',
+                            (client_id, pos.latitude_i, pos.longitude_i, pos.precision_bits))
+
+                # # 確認並提交更改
+                conn.commit()
+
+                # # 關閉連接
+                conn.close()
+                pass
 
         elif message_packet.decoded.portnum == portnums_pb2.TELEMETRY_APP:
             env = telemetry_pb2.Telemetry()
             env.ParseFromString(message_packet.decoded.payload)
-            print(env)
+            print('----->env',env)
 
     except Exception as e:
         print(f"Decryption failed: {str(e)}")
@@ -131,9 +172,9 @@ def on_message(client, userdata, msg):
     service_envelope = mqtt_pb2.ServiceEnvelope()
     try:
         service_envelope.ParseFromString(msg.payload)
-        # print('service_envelope',service_envelope)
+        # print('----------->service_envelope',service_envelope)
         message_packet = service_envelope.packet
-        # print('message_packet',message_packet)
+        # print('----------->message_packet',message_packet)
     except Exception as e:
         print(f"Error parsing message_packet: {str(e)}")
         return
@@ -147,7 +188,7 @@ def on_message(client, userdata, msg):
         print("Unable to determine client_id from topic:", msg.topic)
 
     if message_packet.HasField("encrypted") and not message_packet.HasField("decoded"):
-        text_payload = decode_encrypted(message_packet)
+        text_payload = decode_encrypted(message_packet, client_id)
 
         try:
             print(f'client_id:{client_id} , text_payload: {text_payload}')
@@ -161,6 +202,31 @@ def on_message(client, userdata, msg):
         except Exception as e:
             print(f"Error decode_encrypted message: {str(e)}")
             return
+
+# 建立或連接到數據庫
+conn = sqlite3.connect('meshtastic.db')
+cursor = conn.cursor()
+
+# 創建表格
+create_table_query = f'''CREATE TABLE IF NOT EXISTS {channel} (
+                            client_id TEXT PRIMARY KEY NOT NULL,
+                            long_name TEXT,
+                            short_name TEXT,
+                            macaddr TEXT,
+                            latitude_i TEXT,
+                            longitude_i TEXT,
+                            altitude TEXT,
+                            precision_bits TEXT,
+                            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )'''
+
+cursor.execute(create_table_query)
+
+# 確認並提交更改
+conn.commit()
+
+# 關閉連接
+conn.close()
 
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 client.on_message = on_message
