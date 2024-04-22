@@ -42,11 +42,8 @@ MQTT_USERNAME = os.getenv("MQTT_USERNAME")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 
 root_topic = os.getenv("MQTT_ROOT_TOPIC")
-# channel = "MeshTW"
 channel = os.getenv("MQTT_CHANNEL")
-# key = "1PG7OiApB1nwvP+rz05pAQ=="
-# key = "isDhHrNpJPlGX3GBJBX6kjuK7KQNp4Z0M7OTDpnX5N4="
-key = os.getenv("MQTT_MESH_KEY") #MeshTWtest
+key = os.getenv("MQTT_MESH_KEY")
 
 padded_key = key.ljust(len(key) + ((4 - (len(key) % 4)) % 4), '=')
 replaced_key = padded_key.replace('-', '+').replace('_', '/')
@@ -60,11 +57,10 @@ node_number = int('abcd', 16)
 async def send_telegram_message(bot, chat_id, text_payload):
     await bot.send_message(chat_id=chat_id, text=text_payload)
 
-def process_message(mp, text_payload, is_encrypted, client_id):
+def process_message(mp, text_payload, is_encrypted):
 
     text = {
         "message": text_payload,
-        "gateway": client_id,
         "from": getattr(mp, "from"),
         "id": getattr(mp, "id"),
         "to": getattr(mp, "to")
@@ -77,7 +73,7 @@ def process_message(mp, text_payload, is_encrypted, client_id):
     # )
     print(text)
 
-def decode_encrypted(message_packet,client_id):
+def decode_encrypted(message_packet):
     try:
         key_bytes = base64.b64decode(key.encode('ascii'))
 
@@ -93,12 +89,11 @@ def decode_encrypted(message_packet,client_id):
         data.ParseFromString(decrypted_bytes)
         message_packet.decoded.CopyFrom(data)
 
-        # print('message_packet',message_packet)
-
         if message_packet.decoded.portnum == portnums_pb2.TEXT_MESSAGE_APP:
             text_payload = message_packet.decoded.payload.decode("utf-8")
             is_encrypted = True
-            process_message(message_packet, text_payload, is_encrypted, client_id)
+            # 目前不需要另外再包裝一層，所以就不丟出去process
+            # process_message(message_packet, text_payload, is_encrypted)
             # print(f"{text_payload}")
             return text_payload
 
@@ -127,7 +122,7 @@ def decode_encrypted(message_packet,client_id):
 
 def on_connect(client, userdata, flags, rc, properties):
     if rc == 0:
-        print(f"Connected to {MQTT_BROKER} on topic {channel}")
+        print(f"Connected to {MQTT_BROKER} on topic {subscribe_topic} send to telegram {TELEGRAM_CHAT_ID}")
     else:
         print(f"Failed to connect to MQTT broker with result code {str(rc)}")
 
@@ -135,13 +130,12 @@ def on_message(client, userdata, msg):
     # print("%-20s %d %s" % (msg.topic, msg.qos, msg.payload))
     service_envelope = mqtt_pb2.ServiceEnvelope()
     try:
-        # print('msg',msg)
         service_envelope.ParseFromString(msg.payload)
         # print('service_envelope',service_envelope)
         message_packet = service_envelope.packet
         # print('message_packet',message_packet)
     except Exception as e:
-        print(f"Error parsing message: {str(e)}")
+        print(f"Error parsing message_packet: {str(e)}")
         return
 
     # 獲取發出訊息的 client_id
@@ -153,13 +147,19 @@ def on_message(client, userdata, msg):
         print("Unable to determine client_id from topic:", msg.topic)
 
     if message_packet.HasField("encrypted") and not message_packet.HasField("decoded"):
-        text_payload = decode_encrypted(message_packet,client_id)
+        text_payload = decode_encrypted(message_packet)
 
         try:
-            msg_with_clientid = client_id + ': ' + text_payload
-            asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_with_clientid))
+            print(f'client_id:{client_id} , text_payload: {text_payload}')
+            # 過濾掉沒有文字內容的行為，像是追蹤NODE、要求位置等
+            if text_payload is not None:
+                # 將 MQTT 收到的訊息發送到 Telegram
+                msg_with_clientid = client_id + ': ' + text_payload
+                asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_with_clientid))
+            else:
+                print("Received None payload. Ignoring...")
         except Exception as e:
-            print(f"Error parsing message: {str(e)}")
+            print(f"Error decode_encrypted message: {str(e)}")
             return
 
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
