@@ -103,26 +103,36 @@ def decode_encrypted(message_packet, client_id):
         elif message_packet.decoded.portnum == portnums_pb2.NODEINFO_APP:
                 info = mesh_pb2.User()
                 info.ParseFromString(message_packet.decoded.payload)
-                # print('----->nodeinfo',info)
-                # print(f'id:{info.id}, long_name:{info.long_name}')
 
                 if info.long_name is not None:
+                    print('----->nodeinfo',info)
+                    print(f'id:{info.id}, long_name:{info.long_name}')
                     # 建立或連接到數據庫
                     conn = sqlite3.connect('meshtastic.db')
                     cursor = conn.cursor()
 
-                    # 使用 INSERT OR REPLACE 來新增或更新資料
-                    cursor.execute(f'''INSERT OR REPLACE INTO MeshTW
-                                    (client_id, long_name, short_name)
-                                    VALUES (?, ?, ?)''',
-                                (client_id, info.long_name, info.short_name))
+                    # 檢查是否存在該行
+                    cursor.execute(f'SELECT * FROM {channel} WHERE client_id = ?', (client_id,))
+                    existing_row = cursor.fetchone()
+
+                    # 如果該行存在，執行更新操作；否則執行插入操作
+                    if existing_row:
+                        cursor.execute(f'''UPDATE {channel} SET
+                                        long_name = ?, short_name = ?
+                                        WHERE client_id = ?''',
+                                    (info.long_name, info.short_name, client_id))
+                    else:
+                        cursor.execute(f'''INSERT INTO {channel}
+                                        (client_id, long_name, short_name)
+                                        VALUES (?, ?, ?, ?, ?, ?)''',
+                                    (client_id, info.long_name, info.short_name))
 
                     # 確認並提交更改
                     conn.commit()
 
                     # 關閉連接
                     conn.close()
-                    pass
+
 
                 # notification.notify(
                 # title = "Meshtastic",
@@ -132,19 +142,29 @@ def decode_encrypted(message_packet, client_id):
         elif message_packet.decoded.portnum == portnums_pb2.POSITION_APP:
             pos = mesh_pb2.Position()
             pos.ParseFromString(message_packet.decoded.payload)
-            # print('----->client_id',client_id)
-            # print('----->pos',pos)
 
             if pos.latitude_i != 0:
+                # print('----->client_id',client_id)
+                print('----->pos',pos)
                 # # 建立或連接到數據庫
                 conn = sqlite3.connect('meshtastic.db')
                 cursor = conn.cursor()
 
-                # # 使用 INSERT OR REPLACE 來新增或更新資料
-                cursor.execute(f'''INSERT OR REPLACE INTO MeshTW
-                                (client_id, latitude_i, longitude_i, precision_bits)
-                                VALUES (?, ?, ?, ?)''',
-                            (client_id, pos.latitude_i, pos.longitude_i, pos.precision_bits))
+                # 檢查是否存在該行
+                cursor.execute(f'SELECT * FROM {channel} WHERE client_id = ?', (client_id,))
+                existing_row = cursor.fetchone()
+
+                # 如果該行存在，執行更新操作；否則執行插入操作
+                if existing_row:
+                    cursor.execute(f'''UPDATE {channel} SET
+                                    latitude_i = ?, longitude_i = ?, precision_bits = ?
+                                    WHERE client_id = ?''',
+                                (pos.latitude_i, pos.longitude_i, pos.precision_bits, client_id))
+                else:
+                    cursor.execute(f'''INSERT INTO {channel}
+                                    (client_id, latitude_i, longitude_i, precision_bits)
+                                    VALUES (?, ?, ?, ?)''',
+                                (client_id, pos.latitude_i, pos.longitude_i, pos.precision_bits))
 
                 # # 確認並提交更改
                 conn.commit()
