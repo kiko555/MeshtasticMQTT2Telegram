@@ -194,8 +194,15 @@ def on_message(client, userdata, msg):
             print(f'client_id:{client_id} , text_payload: {text_payload}')
             # 過濾掉沒有文字內容的行為，像是追蹤NODE、要求位置等
             if text_payload is not None:
+                long_name = get_long_name(client_id)
+                if long_name is not None:
+                    print(f"The long name of client {client_id} is: {long_name}")
+                    msg_with_clientid = long_name + ' (' + client_id + '): ' + text_payload
+                else:
+                    print(f"No long name found for client {client_id}")
+                    msg_with_clientid = client_id + ': ' + text_payload
+
                 # 將 MQTT 收到的訊息發送到 Telegram
-                msg_with_clientid = client_id + ': ' + text_payload
                 asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_with_clientid))
             else:
                 print("Received None payload. Ignoring...")
@@ -203,12 +210,31 @@ def on_message(client, userdata, msg):
             print(f"Error decode_encrypted message: {str(e)}")
             return
 
+def get_long_name(client_id):
+    # 連接到 SQLite 資料庫
+    conn = sqlite3.connect('meshtastic.db')
+    cursor = conn.cursor()
+
+    # 執行 SQL 查詢，從 clients 表中讀取 long name
+    cursor.execute("SELECT long_name FROM MeshTW WHERE client_id = ?", (client_id,))
+    row = cursor.fetchone()  # 獲取查詢結果的第一行
+
+    # 關閉資料庫連接
+    cursor.close()
+    conn.close()
+
+    # 如果找到了符合條件的記錄，返回 long name；否則返回 None
+    if row:
+        return row[0]
+    else:
+        return None
+
 # 建立或連接到數據庫
 conn = sqlite3.connect('meshtastic.db')
 cursor = conn.cursor()
 
 # 創建表格
-create_table_query = f'''CREATE TABLE IF NOT EXISTS {channel} (
+create_table_query = f'''CREATE TABLE IF NOT EXISTS MeshTW (
                             client_id TEXT PRIMARY KEY NOT NULL,
                             long_name TEXT,
                             short_name TEXT,
