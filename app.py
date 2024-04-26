@@ -183,12 +183,11 @@ def decode_encrypted(message_packet, client_id):
 
 def on_connect(client, userdata, flags, rc, properties):
     if rc == 0:
-        print(f"Connected to {MQTT_BROKER} on topic {subscribe_topic} send to telegram {TELEGRAM_CHAT_ID}")
+        print(f"Connected to {MQTT_BROKER} on topic:{subscribe_topic} id:{BROADCAST_NUM} send to telegram:{TELEGRAM_CHAT_ID}")
     else:
         print(f"Failed to connect to MQTT broker with result code {str(rc)}")
 
 def on_message(client, userdata, msg):
-    # print("%-20s %d %s" % (msg.topic, msg.qos, msg.payload))
     service_envelope = mqtt_pb2.ServiceEnvelope()
     try:
         service_envelope.ParseFromString(msg.payload)
@@ -199,16 +198,25 @@ def on_message(client, userdata, msg):
         print(f"Error parsing message_packet: {str(e)}")
         return
 
-    # 獲取發出訊息的 client_id
-    topic_parts = msg.topic.split('/')
-    if len(topic_parts) >= 3:
-        client_id = topic_parts[-1]
-        print("Message sent by client_id:", client_id)
-    else:
-        print("Unable to determine client_id from topic:", msg.topic)
+    # 只給特定 channel 的訊息才處理
+    if (message_packet.to == BROADCAST_NUM):
+        # print(message_packet.to)
 
-    if message_packet.HasField("encrypted") and not message_packet.HasField("decoded"):
-        text_payload = decode_encrypted(message_packet, client_id)
+        # 獲取發出訊息的 client_id
+        topic_parts = msg.topic.split('/')
+        if len(topic_parts) >= 3:
+            client_id = topic_parts[-1]
+            print("Message sent by client_id:", client_id)
+        else:
+            print("Unable to determine client_id from topic:", msg.topic)
+
+        # 有無加密欄位的不同處理
+        if message_packet.HasField("encrypted") and not message_packet.HasField("decoded"):
+            text_payload = decode_encrypted(message_packet, client_id)
+            print("----------------------------------*****has decode*****",text_payload)
+        else:
+            # text_payload = message_packet.decoded.payload.decode("utf-8")
+            print("----------------------------------*****no decode*****",mesh_pb2.Data())
 
         try:
             print(f'client_id:{client_id} , text_payload: {text_payload}')
