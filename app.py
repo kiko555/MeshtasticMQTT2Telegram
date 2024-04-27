@@ -236,8 +236,7 @@ def on_message(client, userdata, msg):
 
                 # 將 MQTT 收到的訊息發送到 Telegram
                 # asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_with_clientid))
-                asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_who))
-                asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_content))
+                asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_who+msg_content))
             else:
                 print("Received None payload. Ignoring...")
         except Exception as e:
