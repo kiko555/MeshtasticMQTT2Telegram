@@ -51,13 +51,11 @@ padded_key = key.ljust(len(key) + ((4 - (len(key) % 4)) % 4), '=')
 replaced_key = padded_key.replace('-', '+').replace('_', '/')
 key = replaced_key
 
-# broadcast_id = 4294967295
-
 # Convert hex to int and remove '!'
 # node_number = int('abcd', 16)
 
 async def send_telegram_message(bot, chat_id, text_payload):
-    await bot.send_message(chat_id=chat_id, text=text_payload)
+    await bot.send_message(chat_id=chat_id, text=text_payload, parse_mode='MarkdownV2')
 
 def process_message(mp, text_payload, is_encrypted):
 
@@ -223,15 +221,23 @@ def on_message(client, userdata, msg):
             # 過濾掉沒有文字內容的行為，像是追蹤NODE、要求位置等
             if text_payload is not None:
                 long_name = get_long_name(client_id)
+                text_payload = escape_special_characters(text_payload)
+                client_id = escape_special_characters(client_id)
                 if long_name is not None:
                     print(f"The long name of client {client_id} is: {long_name}")
-                    msg_with_clientid = long_name + ' (' + client_id + '): ' + text_payload
+                    # msg_with_clientid = f"*{long_name}*\({client_id}\):>{text_payload}"
+                    msg_who = f"*{long_name}\({client_id}\)*:"
+                    msg_content = f">{text_payload}"
                 else:
                     print(f"No long name found for client {client_id}")
-                    msg_with_clientid = client_id + ': ' + text_payload
+                    # msg_with_clientid = f"*{client_id}*: > {text_payload}"
+                    msg_who = f"*{client_id}*:"
+                    msg_content = f">{text_payload}"
 
                 # 將 MQTT 收到的訊息發送到 Telegram
-                asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_with_clientid))
+                # asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_with_clientid))
+                asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_who))
+                asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_content))
             else:
                 print("Received None payload. Ignoring...")
         except Exception as e:
@@ -256,6 +262,16 @@ def get_long_name(client_id):
         return row[0]
     else:
         return None
+
+def escape_special_characters(text):
+    special_characters = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    escaped_text = ''
+    for char in text:
+        if char in special_characters:
+            escaped_text += '\\' + char
+        else:
+            escaped_text += char
+    return escaped_text
 
 # 建立或連接到數據庫
 conn = sqlite3.connect('meshtastic.db')
