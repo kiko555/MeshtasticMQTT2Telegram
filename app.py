@@ -220,19 +220,19 @@ def on_message(client, userdata, msg):
             print(f'client_id:{client_id} , text_payload: {text_payload}')
             # 過濾掉沒有文字內容的行為，像是追蹤NODE、要求位置等
             if text_payload is not None:
-                long_name = get_long_name(client_id)
+                long_name = escape_special_characters(get_long_name(client_id))
                 text_payload = escape_special_characters(text_payload)
                 client_id = escape_special_characters(client_id)
                 if long_name is not None:
                     print(f"The long name of client {client_id} is: {long_name}")
                     # msg_with_clientid = f"*{long_name}*\({client_id}\):>{text_payload}"
-                    msg_who = f"*{long_name}\({client_id}\)*:"
-                    msg_content = f">{text_payload}"
+                    msg_who = f"*{long_name} \({client_id}\)*:"
+                    msg_content = f"```\n{text_payload}```"
                 else:
                     print(f"No long name found for client {client_id}")
                     # msg_with_clientid = f"*{client_id}*: > {text_payload}"
                     msg_who = f"*{client_id}*:"
-                    msg_content = f">{text_payload}"
+                    msg_content = f"```\n{text_payload}```"
 
                 # 將 MQTT 收到的訊息發送到 Telegram
                 # asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_with_clientid))
