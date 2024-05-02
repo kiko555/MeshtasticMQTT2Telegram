@@ -122,7 +122,7 @@ def decode_encrypted(message_packet, client_id):
                     else:
                         cursor.execute(f'''INSERT INTO {channel}
                                         (client_id, long_name, short_name)
-                                        VALUES (?, ?, ?, ?, ?, ?)''',
+                                        VALUES (?, ?, ?)''',
                                     (client_id, info.long_name, info.short_name))
 
                     # 確認並提交更改
