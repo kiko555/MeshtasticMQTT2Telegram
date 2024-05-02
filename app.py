@@ -222,22 +222,22 @@ def on_message(client, userdata, msg):
             if text_payload is not None:
                 long_name = get_long_name(client_id)
                 text_payload = escape_special_characters(text_payload)
+                # 訊息內文以引文方式呈現
+                text_payload = '\n>' + '\n>'.join(text_payload.split('\n')) + '\r'
                 client_id = escape_special_characters(client_id)
                 if long_name is not None:
                     long_name = escape_special_characters(long_name)
                     print(f"The long name of client {client_id} is: {long_name}")
                     # msg_with_clientid = f"*{long_name}*\({client_id}\):>{text_payload}"
                     msg_who = f"*{long_name} \({client_id}\)*:"
-                    msg_content = f"```\n{text_payload}```"
                 else:
                     print(f"No long name found for client {client_id}")
                     # msg_with_clientid = f"*{client_id}*: > {text_payload}"
                     msg_who = f"*{client_id}*:"
-                    msg_content = f"```\n{text_payload}```"
 
                 # 將 MQTT 收到的訊息發送到 Telegram
                 # asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_with_clientid))
-                asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_who+msg_content))
+                asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_who+text_payload))
             else:
                 print("Received None payload. Ignoring...")
         except Exception as e:
