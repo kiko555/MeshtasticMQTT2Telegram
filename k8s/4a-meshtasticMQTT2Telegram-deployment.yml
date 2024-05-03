@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meshtasticmqtt2telegram-deployment
+  namespace: meshtastic
+  labels:
+    app: meshtasticmqtt2telegram-deployment
+spec:
+  selector:
+    matchLabels:
+      app: meshtasticmqtt2telegram-pod
+  template:
+    metadata:
+      labels:
+        app: meshtasticmqtt2telegram-pod
+    spec:
+      initContainers:
+        - name: clone-from-github
+          image: alpine/git
+          command:
+            - sh
+            - -c
+            - |
+              if [ -d "/code/.git" ]; then
+                cd /code && git pull
+              else
+                git clone https://github.com/kiko555/MeshtasticMQTT2Telegram.git /code
+              fi
+          volumeMounts:
+            - name: meshtasticmqtt2telegram-code
+              mountPath: /code
+        - name: install-dependencies
+          image: python:3.10
+          command:
+            [
+              "sh",
+              "-c",
+              "cd /code && pip install pipenv && PIPENV_VENV_IN_PROJECT=true pipenv install --deploy --ignore-pipfile",
+            ]
+          volumeMounts:
+            - name: meshtasticmqtt2telegram-code
+              mountPath: /code
+      containers:
+        - name: python-container
+          image: python:3.10
+          command: [
+              "sh",
+              "-c",
+              "cd /code && apt update -qq && install -yqq sqlite3 && pip install pipenv && pipenv run start",
+            ] # install sqlite3 for sotrage message
+          volumeMounts:
+            - name: meshtasticmqtt2telegram-code
+              mountPath: "/code/"
+            - name: env-config-volume
+              mountPath: /code/.env
+              subPath: .env
+          # resources:
+          #   limits:
+          #     cpu: 1000m
+          #     memory: 512Mi
+          #   requests:
+          #     cpu: 100m
+          #     memory: 200Mi
+      volumes:
+        - name: meshtasticmqtt2telegram-code
+          persistentVolumeClaim:
+            claimName: meshtasticmqtt2telegram-code
+        - name: env-config-volume
+          configMap:
+            name: env-config

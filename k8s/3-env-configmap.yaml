@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: env-config
+data:
+  .env: |
+    TELEGRAM_TOKEN=""
+    TELEGRAM_CHAT_ID=""
+
+    MQTT_BROKER="mqtt.meshtastic.org"
+    MQTT_PORT=1883
+    MQTT_USERNAME = "meshdev"
+    MQTT_PASSWORD = "large4cats"
+    MQTT_ROOT_TOPIC="msh/TW/2/e/"
+    MQTT_CHANNEL="MeshTW"
+    MQTT_MESH_KEY=""
