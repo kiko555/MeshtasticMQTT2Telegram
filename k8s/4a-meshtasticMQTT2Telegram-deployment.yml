@@ -46,7 +46,7 @@ spec:
           command: [
               "sh",
               "-c",
-              "cd /code && apt update -qq && install -yqq sqlite3 && pip install pipenv && pipenv run start",
+              "cd /code && apt update -qq && apt install -yqq sqlite3 && pip install pipenv && pipenv run start",
             ] # install sqlite3 for sotrage message
           volumeMounts:
             - name: meshtasticmqtt2telegram-code
