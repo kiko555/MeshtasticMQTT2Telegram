@@ -201,12 +201,16 @@ def on_message(client, userdata, msg):
         # print(message_packet.to)
 
         # 獲取發出訊息的 client_id
-        topic_parts = msg.topic.split('/')
-        if len(topic_parts) >= 3:
-            client_id = topic_parts[-1]
-            print("Message sent by client_id:", client_id)
-        else:
-            print("Unable to determine client_id from topic:", msg.topic)
+        # 取消舊方式，因為採用這個方式，會發生是進入mqtt最後一個節點的ID
+        # topic_parts = msg.topic.split('/')
+        # if len(topic_parts) >= 3:
+        #     client_id = topic_parts[-1]
+        #     print("Message sent by client_id:", client_id)
+        # else:
+        #     print("Unable to determine client_id from topic:", msg.topic)
+        # 改採使用 getattr 動態地訪問 'from' 字段
+        client_id = create_node_id(getattr(message_packet, 'from', None))
+        print('----------->service_envelope.packet.from',client_id)
 
         # 有無加密欄位的不同處理
         if message_packet.HasField("encrypted") and not message_packet.HasField("decoded"):
@@ -272,6 +276,9 @@ def escape_special_characters(text):
         else:
             escaped_text += char
     return escaped_text
+
+def create_node_id(node_number):
+    return f"!{hex(node_number)[2:]}"
 
 # 建立或連接到數據庫
 conn = sqlite3.connect('meshtastic.db')
