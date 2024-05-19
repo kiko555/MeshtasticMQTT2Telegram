@@ -73,7 +73,7 @@ def process_message(mp, text_payload, is_encrypted):
     # )
     print(text)
 
-def decode_encrypted(message_packet, client_id):
+def decode_encrypted(message_packet):
     try:
         key_bytes = base64.b64decode(key.encode('ascii'))
 
@@ -89,22 +89,31 @@ def decode_encrypted(message_packet, client_id):
         data.ParseFromString(decrypted_bytes)
         message_packet.decoded.CopyFrom(data)
 
+        # 獲取發出訊息的 client_id
+        # 取消舊方式，因為採用這個方式，會發生是進入mqtt最後一個節點的ID
+        # topic_parts = msg.topic.split('/')
+        # if len(topic_parts) >= 3:
+        #     client_id = topic_parts[-1]
+        #     print("Message sent by client_id:", client_id)
+        # else:
+        #     print("Unable to determine client_id from topic:", msg.topic)
+        # 改採使用 getattr 動態地訪問 'from' 字段
+        client_id = create_node_id(getattr(message_packet, 'from', None))
+        print('----------->service_envelope.packet.from',client_id)
+
         if message_packet.decoded.portnum == portnums_pb2.TEXT_MESSAGE_APP:
             text_payload = message_packet.decoded.payload.decode("utf-8")
-            is_encrypted = True
-            # 目前不需要另外再包裝一層，所以就不丟出去process
-            # process_message(message_packet, text_payload, is_encrypted)
-            # print(f"{text_payload}")
-            return text_payload
-
+            sendTelegramMsg(text_payload, client_id)
 
         elif message_packet.decoded.portnum == portnums_pb2.NODEINFO_APP:
-                info = mesh_pb2.User()
-                info.ParseFromString(message_packet.decoded.payload)
+            info = mesh_pb2.User()
+            info.ParseFromString(message_packet.decoded.payload)
 
-                if info.long_name is not None:
-                    print('----->nodeinfo',info)
-                    print(f'id:{info.id}, long_name:{info.long_name}')
+            if info.long_name is not None:
+                print('----->nodeinfo',info)
+                print(f'id:{info.id}, long_name:{info.long_name}')
+
+                try:
                     # 建立或連接到數據庫
                     conn = sqlite3.connect('meshtastic.db')
                     cursor = conn.cursor()
@@ -130,13 +139,9 @@ def decode_encrypted(message_packet, client_id):
 
                     # 關閉連接
                     conn.close()
+                except Exception as e:
+                    print(f"Update node Info failed: {str(e)}")
 
-
-                # notification.notify(
-                # title = "Meshtastic",
-                # message = f"{info}",
-                # timeout = 10
-                # )
         elif message_packet.decoded.portnum == portnums_pb2.POSITION_APP:
             pos = mesh_pb2.Position()
             pos.ParseFromString(message_packet.decoded.payload)
@@ -144,32 +149,34 @@ def decode_encrypted(message_packet, client_id):
             if pos.latitude_i != 0:
                 # print('----->client_id',client_id)
                 print('----->pos',pos)
-                # # 建立或連接到數據庫
-                conn = sqlite3.connect('meshtastic.db')
-                cursor = conn.cursor()
+                try:
+                    # 建立或連接到數據庫
+                    conn = sqlite3.connect('meshtastic.db')
+                    cursor = conn.cursor()
 
-                # 檢查是否存在該行
-                cursor.execute(f'SELECT * FROM {channel} WHERE client_id = ?', (client_id,))
-                existing_row = cursor.fetchone()
+                    # 檢查是否存在該行
+                    cursor.execute(f'SELECT * FROM {channel} WHERE client_id = ?', (client_id,))
+                    existing_row = cursor.fetchone()
 
-                # 如果該行存在，執行更新操作；否則執行插入操作
-                if existing_row:
-                    cursor.execute(f'''UPDATE {channel} SET
-                                    latitude_i = ?, longitude_i = ?, precision_bits = ?
-                                    WHERE client_id = ?''',
-                                (pos.latitude_i, pos.longitude_i, pos.precision_bits, client_id))
-                else:
-                    cursor.execute(f'''INSERT INTO {channel}
-                                    (client_id, latitude_i, longitude_i, precision_bits)
-                                    VALUES (?, ?, ?, ?)''',
-                                (client_id, pos.latitude_i, pos.longitude_i, pos.precision_bits))
+                    # 如果該行存在，執行更新操作；否則執行插入操作
+                    if existing_row:
+                        cursor.execute(f'''UPDATE {channel} SET
+                                        latitude_i = ?, longitude_i = ?, precision_bits = ?
+                                        WHERE client_id = ?''',
+                                    (pos.latitude_i, pos.longitude_i, pos.precision_bits, client_id))
+                    else:
+                        cursor.execute(f'''INSERT INTO {channel}
+                                        (client_id, latitude_i, longitude_i, precision_bits)
+                                        VALUES (?, ?, ?, ?)''',
+                                    (client_id, pos.latitude_i, pos.longitude_i, pos.precision_bits))
 
-                # # 確認並提交更改
-                conn.commit()
+                    # # 確認並提交更改
+                    conn.commit()
 
-                # # 關閉連接
-                conn.close()
-                pass
+                    # # 關閉連接
+                    conn.close()
+                except Exception as e:
+                    print(f"Update node Position failed: {str(e)}")
 
         elif message_packet.decoded.portnum == portnums_pb2.TELEMETRY_APP:
             env = telemetry_pb2.Telemetry()
@@ -199,54 +206,40 @@ def on_message(client, userdata, msg):
     # 只給特定 channel 的訊息才處理
     if (message_packet.to == BROADCAST_NUM):
         # print(message_packet.to)
-
-        # 獲取發出訊息的 client_id
-        # 取消舊方式，因為採用這個方式，會發生是進入mqtt最後一個節點的ID
-        # topic_parts = msg.topic.split('/')
-        # if len(topic_parts) >= 3:
-        #     client_id = topic_parts[-1]
-        #     print("Message sent by client_id:", client_id)
-        # else:
-        #     print("Unable to determine client_id from topic:", msg.topic)
-        # 改採使用 getattr 動態地訪問 'from' 字段
-        client_id = create_node_id(getattr(message_packet, 'from', None))
-        print('----------->service_envelope.packet.from',client_id)
-
         # 有無加密欄位的不同處理
         if message_packet.HasField("encrypted") and not message_packet.HasField("decoded"):
-            text_payload = decode_encrypted(message_packet, client_id)
-            print("----------------------------------*****has decode*****",text_payload)
+            decode_encrypted(message_packet)
         else:
             # text_payload = message_packet.decoded.payload.decode("utf-8")
             print("----------------------------------*****no decode*****",mesh_pb2.Data())
 
-        try:
-            print(f'client_id:{client_id} , text_payload: {text_payload}')
-            # 過濾掉沒有文字內容的行為，像是追蹤NODE、要求位置等
-            if text_payload is not None:
-                long_name = get_long_name(client_id)
-                text_payload = escape_special_characters(text_payload)
-                # 訊息內文以引文方式呈現
-                text_payload = '\n>' + '\n>'.join(text_payload.split('\n')) + '\r'
-                client_id = escape_special_characters(client_id)
-                if long_name is not None:
-                    long_name = escape_special_characters(long_name)
-                    print(f"The long name of client {client_id} is: {long_name}")
-                    # msg_with_clientid = f"*{long_name}*\({client_id}\):>{text_payload}"
-                    msg_who = f"*{long_name} \({client_id}\)*:"
-                else:
-                    print(f"No long name found for client {client_id}")
-                    # msg_with_clientid = f"*{client_id}*: > {text_payload}"
-                    msg_who = f"*{client_id}*:"
-
-                # 將 MQTT 收到的訊息發送到 Telegram
-                # asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_with_clientid))
-                asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_who+text_payload))
+def sendTelegramMsg(text_payload, client_id):
+    try:
+        print(f'client_id:{client_id} , text_payload: {text_payload}')
+        # 過濾掉沒有文字內容的行為，像是追蹤NODE、要求位置等
+        if text_payload is not None:
+            long_name = get_long_name(client_id)
+            text_payload = escape_special_characters(text_payload)
+            # 訊息內文以引文方式呈現
+            text_payload = '\n>' + '\n>'.join(text_payload.split('\n')) + '\r'
+            client_id = escape_special_characters(client_id)
+            if long_name is not None:
+                long_name = escape_special_characters(long_name)
+                print(f"The long name of client {client_id} is: {long_name}")
+                # msg_with_clientid = f"*{long_name}*\({client_id}\):>{text_payload}"
+                msg_who = f"*{long_name} \({client_id}\)*:"
             else:
-                print("Received None payload. Ignoring...")
-        except Exception as e:
-            print(f"Error decode_encrypted message: {str(e)}")
-            return
+                print(f"No long name found for client {client_id}")
+                # msg_with_clientid = f"*{client_id}*: > {text_payload}"
+                msg_who = f"*{client_id}*:"
+
+            # 將 MQTT 收到的訊息發送到 Telegram
+            asyncio.get_event_loop().run_until_complete(send_telegram_message(bot, TELEGRAM_CHAT_ID, msg_who+text_payload))
+        else:
+            print("Received None payload. Ignoring...")
+    except Exception as e:
+        print(f"send message to telegram error: {str(e)}")
+        return
 
 def get_long_name(client_id):
     # 連接到 SQLite 資料庫
