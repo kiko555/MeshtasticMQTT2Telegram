@@ -188,6 +188,8 @@ def decode_encrypted(message_packet):
 
 def on_connect(client, userdata, flags, rc, properties):
     if rc == 0:
+        # Subscribe to the custom topic 'msh/#'
+        client.subscribe("msh/#")
         print(f"Connected to {MQTT_BROKER} on topic:{subscribe_topic} id:{BROADCAST_NUM} send to telegram:{TELEGRAM_CHAT_ID}")
     else:
         print(f"Failed to connect to MQTT broker with result code {str(rc)}")
